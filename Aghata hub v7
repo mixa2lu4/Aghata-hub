@@ -1,0 +1,952 @@
+--[[
+    AGHATA HUB V5.4 MOBILE - HITBOX CONFIGURÁVEL
+    Clique em HB → escolha o tamanho → hitbox ativa
+--]]
+
+local Players = game:GetService("Players")
+local Lighting = game:GetService("Lightning")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- Configurações
+local Settings = {
+    SelectedPlayer = nil,
+    NoclipEnabled = false,
+    HitboxEnabled = false,
+    HitboxSize = 5,
+    Invisible = false,
+    SuperJump = false,
+    TelekinesisActive = false,
+    TelekinesisTarget = nil,
+    AuraEnabled = false,
+    OriginalJumpPower = nil,
+    OriginalGravity = nil
+}
+
+-- Variáveis
+local currentVisionConnection = nil
+local noclipConnection = nil
+local hitboxConnections = {}
+local clonedParts = {}
+local originalParts = {}
+local auraConnections = {}
+local currentEffect = nil
+
+-- Cores
+local PurpleColor = Color3.fromRGB(156, 81, 255)
+local DarkPurple = Color3.fromRGB(75, 0, 130)
+local LightPurple = Color3.fromRGB(180, 100, 255)
+local NeonRoxo = Color3.fromRGB(200, 50, 255)
+
+-- Funções auxiliares
+local function GetRoot(character)
+    return character and character:FindFirstChild("HumanoidRootPart")
+end
+
+local function GetHumanoid(character)
+    return character and character:FindFirstChild("Humanoid")
+end
+
+-- ========== HITBOX COM SELEÇÃO DE TAMANHO ==========
+local function ShowHitboxSizeDialog()
+    -- Cria um popup de entrada para mobile
+    local dialogFrame = Instance.new("Frame")
+    dialogFrame.Size = UDim2.new(0, 200, 0, 100)
+    dialogFrame.Position = UDim2.new(0.5, -100, 0.5, -50)
+    dialogFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 18)
+    dialogFrame.BackgroundTransparency = 0.1
+    dialogFrame.BorderSizePixel = 0
+    dialogFrame.Parent = screenGui
+    
+    local dialogCorner = Instance.new("UICorner")
+    dialogCorner.CornerRadius = UDim.new(0, 12)
+    dialogCorner.Parent = dialogFrame
+    
+    local dialogStroke = Instance.new("UIStroke")
+    dialogStroke.Color = PurpleColor
+    dialogStroke.Thickness = 1
+    dialogStroke.Parent = dialogFrame
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, 0, 0, 25)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "📦 Tamanho da Hitbox"
+    titleLabel.TextColor3 = LightPurple
+    titleLabel.TextSize = 12
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.Parent = dialogFrame
+    
+    local inputBox = Instance.new("TextBox")
+    inputBox.Size = UDim2.new(0, 150, 0, 35)
+    inputBox.Position = UDim2.new(0.5, -75, 0, 30)
+    inputBox.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+    inputBox.Text = tostring(Settings.HitboxSize)
+    inputBox.TextColor3 = Color3.new(1,1,1)
+    inputBox.TextSize = 14
+    inputBox.Font = Enum.Font.Gotham
+    inputBox.PlaceholderText = "1 a 300"
+    inputBox.ClearTextOnFocus = false
+    inputBox.Parent = dialogFrame
+    
+    local inputCorner = Instance.new("UICorner")
+    inputCorner.CornerRadius = UDim.new(0, 8)
+    inputCorner.Parent = inputBox
+    
+    local confirmBtn = Instance.new("TextButton")
+    confirmBtn.Size = UDim2.new(0, 60, 0, 25)
+    confirmBtn.Position = UDim2.new(0.5, -65, 1, -30)
+    confirmBtn.BackgroundColor3 = PurpleColor
+    confirmBtn.Text = "✅ ATIVAR"
+    confirmBtn.TextColor3 = Color3.new(1,1,1)
+    confirmBtn.TextSize = 10
+    confirmBtn.Font = Enum.Font.GothamBold
+    confirmBtn.Parent = dialogFrame
+    
+    local confirmCorner = Instance.new("UICorner")
+    confirmCorner.CornerRadius = UDim.new(0, 6)
+    confirmCorner.Parent = confirmBtn
+    
+    local cancelBtn = Instance.new("TextButton")
+    cancelBtn.Size = UDim2.new(0, 60, 0, 25)
+    cancelBtn.Position = UDim2.new(0.5, 5, 1, -30)
+    cancelBtn.BackgroundColor3 = DarkPurple
+    cancelBtn.Text = "❌ CANCELAR"
+    cancelBtn.TextColor3 = Color3.new(1,1,1)
+    cancelBtn.TextSize = 10
+    cancelBtn.Font = Enum.Font.GothamBold
+    cancelBtn.Parent = dialogFrame
+    
+    local cancelCorner = Instance.new("UICorner")
+    cancelCorner.CornerRadius = UDim.new(0, 6)
+    cancelCorner.Parent = cancelBtn
+    
+    confirmBtn.MouseButton1Click:Connect(function()
+        local newSize = tonumber(inputBox.Text)
+        if newSize and newSize >= 1 and newSize <= 300 then
+            Settings.HitboxSize = newSize
+            -- Ativa a hitbox com o novo tamanho
+            ActivateHitbox()
+            infoLabel.Text = "✅ Hitbox ATIVADA - Tamanho: " .. Settings.HitboxSize
+            buttonsList.HITBOX.BackgroundColor3 = LightPurple
+        else
+            infoLabel.Text = "❌ Tamanho inválido! Use 1-300"
+        end
+        dialogFrame:Destroy()
+        task.wait(1.5)
+        infoLabel.Text = "✅ Pronto"
+    end)
+    
+    cancelBtn.MouseButton1Click:Connect(function()
+        dialogFrame:Destroy()
+        infoLabel.Text = "❌ Hitbox não ativada"
+        task.wait(1)
+        infoLabel.Text = "✅ Pronto"
+    end)
+    
+    -- Fecha se clicar fora (opcional)
+    dialogFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            local pos = input.Position
+            local absPos = dialogFrame.AbsolutePosition
+            local absSize = dialogFrame.AbsoluteSize
+            if pos.X < absPos.X or pos.X > absPos.X + absSize.X or pos.Y < absPos.Y or pos.Y > absPos.Y + absSize.Y then
+                dialogFrame:Destroy()
+                infoLabel.Text = "❌ Hitbox cancelada"
+            end
+        end
+    end)
+end
+
+local function ActivateHitbox()
+    -- Remove hitboxes antigas
+    for player, hitbox in pairs(hitboxConnections) do
+        pcall(function() hitbox:Destroy() end)
+    end
+    hitboxConnections = {}
+    
+    Settings.HitboxEnabled = true
+    
+    -- Cria hitboxes para todos os jogadores (exceto você)
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local root = GetRoot(player.Character)
+            if root then
+                local hitbox = Instance.new("Part")
+                hitbox.Size = Vector3.new(Settings.HitboxSize, Settings.HitboxSize, Settings.HitboxSize)
+                hitbox.Transparency = 0.4
+                hitbox.Color = PurpleColor
+                hitbox.Material = Enum.Material.Neon
+                hitbox.Anchored = false
+                hitbox.CanCollide = false
+                
+                local weld = Instance.new("WeldConstraint")
+                weld.Part0 = hitbox
+                weld.Part1 = root
+                weld.Parent = hitbox
+                hitbox.Parent = workspace
+                
+                hitboxConnections[player] = hitbox
+            end
+        end
+    end
+end
+
+local function DeactivateHitbox()
+    Settings.HitboxEnabled = false
+    for player, hitbox in pairs(hitboxConnections) do
+        pcall(function() hitbox:Destroy() end)
+    end
+    hitboxConnections = {}
+end
+
+local function ToggleHitbox()
+    if Settings.HitboxEnabled then
+        DeactivateHitbox()
+        infoLabel.Text = "❌ Hitbox DESATIVADA"
+        buttonsList.HITBOX.BackgroundColor3 = DarkPurple
+    else
+        -- Mostra o dialog para escolher o tamanho
+        ShowHitboxSizeDialog()
+    end
+end
+
+-- ========== AURA ROXA ==========
+local function ApplyAuraToPlayer(player)
+    if not player or player == LocalPlayer then return end
+    
+    local character = player.Character
+    if not character then return end
+    
+    if auraConnections[player] then
+        for _, part in pairs(auraConnections[player]) do
+            pcall(function() part:Destroy() end)
+        end
+        auraConnections[player] = nil
+    end
+    
+    local auraPartsList = {}
+    
+    local function createAuraPart(parent, size)
+        local part = Instance.new("Part")
+        part.Size = size
+        part.Shape = Enum.PartType.Ball
+        part.Color = NeonRoxo
+        part.Material = Enum.Material.Neon
+        part.Transparency = 0.6
+        part.Anchored = false
+        part.CanCollide = false
+        part.Parent = parent
+        
+        local weld = Instance.new("WeldConstraint")
+        weld.Part0 = part
+        weld.Part1 = parent
+        weld.Parent = part
+        
+        local tweenInfo = TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+        local tween = TweenService:Create(part, tweenInfo, {Transparency = 0.3})
+        tween:Play()
+        
+        table.insert(auraPartsList, part)
+        return part
+    end
+    
+    local root = GetRoot(character)
+    if root then
+        createAuraPart(root, Vector3.new(4, 1.5, 4))
+        local head = character:FindFirstChild("Head")
+        if head then
+            createAuraPart(head, Vector3.new(3, 1, 3))
+        end
+    end
+    
+    auraConnections[player] = auraPartsList
+end
+
+local function ToggleAura()
+    Settings.AuraEnabled = not Settings.AuraEnabled
+    
+    if Settings.AuraEnabled then
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                ApplyAuraToPlayer(player)
+            end
+        end
+        infoLabel.Text = "✨ Aura Roxa ATIVADA em todos"
+        buttonsList.AURA.BackgroundColor3 = LightPurple
+    else
+        for player, parts in pairs(auraConnections) do
+            for _, part in pairs(parts) do
+                pcall(function() part:Destroy() end)
+            end
+        end
+        auraConnections = {}
+        infoLabel.Text = "✨ Aura Roxa DESATIVADA"
+        buttonsList.AURA.BackgroundColor3 = DarkPurple
+    end
+    task.wait(1.5)
+    infoLabel.Text = "✅ Pronto"
+end
+
+-- ========== TELEPORT, PULL, VISION ==========
+local function TeleportToPlayer(player)
+    if not player or not player.Character then return "❌ Jogador inválido" end
+    
+    local targetRoot = GetRoot(player.Character)
+    local myRoot = GetRoot(LocalPlayer.Character)
+    
+    if targetRoot and myRoot then
+        myRoot.CFrame = targetRoot.CFrame + Vector3.new(0, 3, 0)
+        return "✅ Teleportado para " .. player.Name
+    end
+    return "❌ Falha"
+end
+
+local function PullPlayer(player)
+    if not player or not player.Character then return "❌ Jogador inválido" end
+    
+    local targetRoot = GetRoot(player.Character)
+    local myRoot = GetRoot(LocalPlayer.Character)
+    
+    if targetRoot and myRoot then
+        for _, part in pairs(player.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+        
+        targetRoot.CFrame = myRoot.CFrame + myRoot.CFrame.LookVector * 2
+        
+        task.wait(0.5)
+        for _, part in pairs(player.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+        return "✨ " .. player.Name .. " puxado!"
+    end
+    return "❌ Falha"
+end
+
+local function ViewPlayer(player)
+    if not player or not player.Character then return "❌ Jogador inválido" end
+    
+    local humanoid = GetHumanoid(player.Character)
+    if not humanoid or humanoid.Health <= 0 then return "❌ Jogador morto" end
+    
+    if currentEffect then
+        for _, effect in pairs(currentEffect) do
+            pcall(function() effect:Destroy() end)
+        end
+    end
+    
+    local bloom = Instance.new("BloomEffect")
+    bloom.Intensity = 0.25
+    bloom.Size = 12
+    bloom.Parent = Lighting
+    
+    local colorCorrection = Instance.new("ColorCorrectionEffect")
+    colorCorrection.TintColor = PurpleColor
+    colorCorrection.Contrast = 0.08
+    colorCorrection.Parent = Lighting
+    
+    currentEffect = {bloom, colorCorrection}
+    Camera.CameraSubject = humanoid
+    
+    if currentVisionConnection then
+        currentVisionConnection:Disconnect()
+    end
+    
+    currentVisionConnection = RunService.RenderStepped:Connect(function()
+        if not player.Character or not player.Character.Parent then
+            for _, effect in pairs(currentEffect or {}) do
+                pcall(function() effect:Destroy() end)
+            end
+            currentEffect = nil
+            Camera.CameraSubject = LocalPlayer.Character
+            currentVisionConnection:Disconnect()
+            currentVisionConnection = nil
+        end
+    end)
+    
+    return "👁️ Vendo: " .. player.Name
+end
+
+-- ========== OUTRAS FUNÇÕES ==========
+local function ToggleNoclip()
+    Settings.NoclipEnabled = not Settings.NoclipEnabled
+    
+    if Settings.NoclipEnabled then
+        if noclipConnection then noclipConnection:Disconnect() end
+        noclipConnection = RunService.Stepped:Connect(function()
+            local character = LocalPlayer.Character
+            if character then
+                for _, part in pairs(character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end)
+        infoLabel.Text = "✅ NoClip ATIVADO"
+        buttonsList.NOCLIP.BackgroundColor3 = LightPurple
+    else
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+        local character = LocalPlayer.Character
+        if character then
+            for _, part in pairs(character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
+        infoLabel.Text = "❌ NoClip DESATIVADO"
+        buttonsList.NOCLIP.BackgroundColor3 = DarkPurple
+    end
+    task.wait(1.2)
+    infoLabel.Text = "✅ Pronto"
+end
+
+local function CloneCharacter(targetPlayer)
+    if not targetPlayer or not targetPlayer.Character then return "❌ Jogador inválido" end
+    
+    local myCharacter = LocalPlayer.Character
+    if not myCharacter then return "❌ Sem personagem" end
+    
+    if #originalParts == 0 then
+        for _, child in pairs(myCharacter:GetChildren()) do
+            if child:IsA("BasePart") or child:IsA("Accessory") or child:IsA("Shirt") or child:IsA("Pants") then
+                table.insert(originalParts, {Data = child:Clone()})
+            end
+        end
+    end
+    
+    for _, part in pairs(clonedParts) do
+        pcall(function() part:Destroy() end)
+    end
+    clonedParts = {}
+    
+    local targetChar = targetPlayer.Character
+    local myHumanoid = GetHumanoid(myCharacter)
+    local targetHumanoid = GetHumanoid(targetChar)
+    
+    for _, clothing in pairs(targetChar:GetChildren()) do
+        if clothing:IsA("Shirt") or clothing:IsA("Pants") or clothing:IsA("ShirtGraphic") then
+            local newClothing = clothing:Clone()
+            newClothing.Parent = myCharacter
+            table.insert(clonedParts, newClothing)
+        end
+    end
+    
+    for _, accessory in pairs(targetChar:GetChildren()) do
+        if accessory:IsA("Accessory") then
+            local newAcc = accessory:Clone()
+            newAcc.Parent = myCharacter
+            table.insert(clonedParts, newAcc)
+        end
+    end
+    
+    if targetHumanoid and myHumanoid then
+        myHumanoid.HeadColor = targetHumanoid.HeadColor
+        myHumanoid.TorsoColor = targetHumanoid.TorsoColor
+        myHumanoid.LeftArmColor = targetHumanoid.LeftArmColor
+        myHumanoid.RightArmColor = targetHumanoid.RightArmColor
+        myHumanoid.LeftLegColor = targetHumanoid.LeftLegColor
+        myHumanoid.RightLegColor = targetHumanoid.RightLegColor
+    end
+    
+    return "🎭 Clonado: " .. targetPlayer.Name
+end
+
+local function ResetCharacter()
+    local myCharacter = LocalPlayer.Character
+    if not myCharacter then return "❌ Sem personagem" end
+    
+    for _, part in pairs(clonedParts) do
+        pcall(function() part:Destroy() end)
+    end
+    clonedParts = {}
+    
+    for _, partData in pairs(originalParts) do
+        pcall(function()
+            local newPart = partData.Data:Clone()
+            newPart.Parent = myCharacter
+        end)
+    end
+    
+    local humanoid = GetHumanoid(myCharacter)
+    if humanoid then
+        humanoid.HeadColor = Color3.fromRGB(255,255,255)
+        humanoid.TorsoColor = Color3.fromRGB(255,255,255)
+        humanoid.LeftArmColor = Color3.fromRGB(255,255,255)
+        humanoid.RightArmColor = Color3.fromRGB(255,255,255)
+        humanoid.LeftLegColor = Color3.fromRGB(255,255,255)
+        humanoid.RightLegColor = Color3.fromRGB(255,255,255)
+    end
+    
+    return "✅ Resetado"
+end
+
+local function ToggleInvisibility()
+    Settings.Invisible = not Settings.Invisible
+    local character = LocalPlayer.Character
+    if not character then return "❌ Sem personagem" end
+    
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") or part:IsA("MeshPart") then
+            part.Transparency = Settings.Invisible and 1 or 0
+        end
+    end
+    
+    if Settings.Invisible then
+        infoLabel.Text = "✅ Invisível"
+        buttonsList.INVIS.BackgroundColor3 = LightPurple
+    else
+        infoLabel.Text = "❌ Visível"
+        buttonsList.INVIS.BackgroundColor3 = DarkPurple
+    end
+    task.wait(1)
+    infoLabel.Text = "✅ Pronto"
+end
+
+local function ToggleSuperJump()
+    Settings.SuperJump = not Settings.SuperJump
+    local character = LocalPlayer.Character
+    local humanoid = character and GetHumanoid(character)
+    
+    if humanoid then
+        if Settings.SuperJump then
+            Settings.OriginalJumpPower = humanoid.JumpPower
+            Settings.OriginalGravity = Workspace.Gravity
+            humanoid.JumpPower = 120
+            Workspace.Gravity = 30
+            infoLabel.Text = "✅ Super Pulo ON"
+            buttonsList.SUPERJUMP.BackgroundColor3 = LightPurple
+        else
+            humanoid.JumpPower = Settings.OriginalJumpPower or 50
+            Workspace.Gravity = Settings.OriginalGravity or 196.2
+            infoLabel.Text = "❌ Super Pulo OFF"
+            buttonsList.SUPERJUMP.BackgroundColor3 = DarkPurple
+        end
+    end
+    task.wait(1)
+    infoLabel.Text = "✅ Pronto"
+end
+
+-- ========== TELECINESIA MOBILE ==========
+local function TelekinesisMobile(player)
+    if Settings.TelekinesisActive then
+        if Settings.TelekinesisTarget and Settings.TelekinesisTarget.Character then
+            local humanoid = GetHumanoid(Settings.TelekinesisTarget.Character)
+            if humanoid then
+                humanoid.PlatformStand = false
+            end
+        end
+        Settings.TelekinesisActive = false
+        Settings.TelekinesisTarget = nil
+        infoLabel.Text = "❌ Telecinesia DESATIVADA"
+        buttonsList.TELEK.BackgroundColor3 = DarkPurple
+    elseif player then
+        local character = player.Character
+        if not character then
+            infoLabel.Text = "❌ Jogador sem personagem"
+            return
+        end
+        local humanoid = GetHumanoid(character)
+        if humanoid then
+            Settings.TelekinesisActive = true
+            Settings.TelekinesisTarget = player
+            humanoid.PlatformStand = true
+            infoLabel.Text = "🌀 " .. player.Name .. " levitando!"
+            buttonsList.TELEK.BackgroundColor3 = LightPurple
+        end
+    end
+    task.wait(1.5)
+    if not Settings.TelekinesisActive then
+        infoLabel.Text = "✅ Pronto"
+    end
+end
+
+-- Loop da telecinesia
+RunService.Heartbeat:Connect(function()
+    if Settings.TelekinesisActive and Settings.TelekinesisTarget then
+        local character = Settings.TelekinesisTarget.Character
+        if character then
+            local root = GetRoot(character)
+            local myRoot = GetRoot(LocalPlayer.Character)
+            if root and myRoot then
+                -- O jogador levita na sua frente
+                local targetPos = myRoot.Position + myRoot.CFrame.LookVector * 3 + Vector3.new(0, 3, 0)
+                root.Velocity = (targetPos - root.Position) * 5
+            end
+        else
+            Settings.TelekinesisActive = false
+            Settings.TelekinesisTarget = nil
+            buttonsList.TELEK.BackgroundColor3 = DarkPurple
+        end
+    end
+end)
+
+-- ========== INTERFACE MOBILE 260x130 ==========
+pcall(function()
+    if game.CoreGui:FindFirstChild("AghataHubMobile") then
+        game.CoreGui.AghataHubMobile:Destroy()
+    end
+end)
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AghataHubMobile"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = game.CoreGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 260, 0, 130)
+mainFrame.Position = UDim2.new(0.02, 0, 0.3, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 18)
+mainFrame.BackgroundTransparency = 0.25
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 16)
+corner.Parent = mainFrame
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = PurpleColor
+stroke.Thickness = 1.2
+stroke.Transparency = 0.4
+stroke.Parent = mainFrame
+
+-- Top bar
+local topBar = Instance.new("Frame")
+topBar.Size = UDim2.new(1, 0, 0, 24)
+topBar.BackgroundColor3 = DarkPurple
+topBar.BackgroundTransparency = 0.3
+topBar.Parent = mainFrame
+
+local topCorner = Instance.new("UICorner")
+topCorner.CornerRadius = UDim.new(0, 12)
+topCorner.Parent = topBar
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, -30, 1, 0)
+titleLabel.Position = UDim2.new(0, 8, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "AGHATA HUB V5.4"
+titleLabel.TextColor3 = LightPurple
+titleLabel.TextSize = 10
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = topBar
+
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Size = UDim2.new(0, 18, 0, 18)
+minimizeBtn.Position = UDim2.new(1, -22, 0, 3)
+minimizeBtn.BackgroundColor3 = PurpleColor
+minimizeBtn.BackgroundTransparency = 0.4
+minimizeBtn.Text = "−"
+minimizeBtn.TextColor3 = Color3.new(1,1,1)
+minimizeBtn.TextSize = 14
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.Parent = topBar
+
+local minCorner = Instance.new("UICorner")
+minCorner.CornerRadius = UDim.new(0, 4)
+minCorner.Parent = minimizeBtn
+
+-- Content
+local contentFrame = Instance.new("Frame")
+contentFrame.Size = UDim2.new(1, -6, 1, -28)
+contentFrame.Position = UDim2.new(0, 3, 0, 25)
+contentFrame.BackgroundTransparency = 1
+contentFrame.Parent = mainFrame
+
+-- Player list
+local playerListFrame = Instance.new("Frame")
+playerListFrame.Size = UDim2.new(0, 85, 1, -10)
+playerListFrame.Position = UDim2.new(0, 0, 0, 0)
+playerListFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 18)
+playerListFrame.BackgroundTransparency = 0.5
+playerListFrame.Parent = contentFrame
+
+local listCorner = Instance.new("UICorner")
+listCorner.CornerRadius = UDim.new(0, 6)
+listCorner.Parent = playerListFrame
+
+local playerScroll = Instance.new("ScrollingFrame")
+playerScroll.Size = UDim2.new(1, -4, 1, -4)
+playerScroll.Position = UDim2.new(0, 2, 0, 2)
+playerScroll.BackgroundTransparency = 1
+playerScroll.BorderSizePixel = 0
+playerScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+playerScroll.ScrollBarThickness = 3
+playerScroll.Parent = playerListFrame
+
+local playerLayout = Instance.new("UIListLayout")
+playerLayout.Padding = UDim.new(0, 2)
+playerLayout.Parent = playerScroll
+
+-- Buttons
+local buttonsFrame = Instance.new("Frame")
+buttonsFrame.Size = UDim2.new(0, 160, 1, -10)
+buttonsFrame.Position = UDim2.new(1, -165, 0, 0)
+buttonsFrame.BackgroundTransparency = 1
+buttonsFrame.Parent = contentFrame
+
+local buttonGrid = Instance.new("Frame")
+buttonGrid.Size = UDim2.new(1, 0, 1, 0)
+buttonGrid.BackgroundTransparency = 1
+buttonGrid.Parent = buttonsFrame
+
+local buttonsList = {}
+local buttonNames = {
+    {name = "TP", text = "🚀 TP", row=0, col=0},
+    {name = "VISION", text = "👁️ VIS", row=0, col=1},
+    {name = "PULL", text = "🔄 PUX", row=0, col=2},
+    {name = "NOCLIP", text = "🧱 NC", row=1, col=0},
+    {name = "HITBOX", text = "📦 HB", row=1, col=1},
+    {name = "CLONE", text = "🎭 CLN", row=1, col=2},
+    {name = "AURA", text = "✨ AURA", row=2, col=0},
+    {name = "INVIS", text = "👻 INV", row=2, col=1},
+    {name = "SUPERJUMP", text = "🦘 SUP", row=2, col=2},
+    {name = "TELEK", text = "🌀 TEK", row=3, col=0},
+    {name = "RESET", text = "🔄 RST", row=3, col=1}
+}
+
+local btnWidth = 50
+local btnHeight = 22
+local btnSpacing = 3
+
+for _, btnInfo in pairs(buttonNames) do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, btnWidth, 0, btnHeight)
+    btn.Position = UDim2.new(0, btnInfo.col * (btnWidth + btnSpacing), 0, btnInfo.row * (btnHeight + btnSpacing))
+    btn.BackgroundColor3 = DarkPurple
+    btn.BackgroundTransparency = 0.2
+    btn.Text = btnInfo.text
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.TextSize = 8
+    btn.Font = Enum.Font.GothamSemibold
+    btn.Parent = buttonGrid
+    
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 4)
+    btnCorner.Parent = btn
+    
+    btn.MouseEnter:Connect(function()
+        btn.BackgroundTransparency = 0.05
+        btn.BackgroundColor3 = PurpleColor
+    end)
+    btn.MouseLeave:Connect(function()
+        btn.BackgroundTransparency = 0.2
+        btn.BackgroundColor3 = DarkPurple
+    end)
+    
+    buttonsList[btnInfo.name] = btn
+end
+
+-- Info label
+local infoLabel = Instance.new("TextLabel")
+infoLabel.Size = UDim2.new(1, -6, 0, 16)
+infoLabel.Position = UDim2.new(0, 3, 1, -18)
+infoLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+infoLabel.BackgroundTransparency = 0.5
+infoLabel.Text = "✅ Selecione um jogador"
+infoLabel.TextColor3 = NeonRoxo
+infoLabel.TextSize = 8
+infoLabel.Font = Enum.Font.Gotham
+infoLabel.TextXAlignment = Enum.TextXAlignment.Center
+infoLabel.Parent = mainFrame
+
+local infoCorner = Instance.new("UICorner")
+infoCorner.CornerRadius = UDim.new(0, 6)
+infoCorner.Parent = infoLabel
+
+-- Drag
+local dragging = false
+local dragStart, startPos
+
+mainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+    end
+end)
+
+mainFrame.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Player list update
+local function UpdatePlayerList()
+    for _, child in pairs(playerScroll:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    
+    local function AddPlayerButton(player)
+        if player == LocalPlayer then return end
+        
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, 0, 0, 20)
+        btn.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
+        btn.BackgroundTransparency = 0.3
+        btn.Text = player.Name
+        btn.TextColor3 = Color3.new(1,1,1)
+        btn.TextSize = 8
+        btn.Font = Enum.Font.GothamSemibold
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.Parent = playerScroll
+        
+        local btnCorner = Instance.new("UICorner")
+        btnCorner.CornerRadius = UDim.new(0, 4)
+        btnCorner.Parent = btn
+        
+        btn.MouseButton1Click:Connect(function()
+            for _, v in pairs(playerScroll:GetChildren()) do
+                if v:IsA("TextButton") then
+                    v.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
+                    v.BackgroundTransparency = 0.3
+                end
+            end
+            btn.BackgroundColor3 = PurpleColor
+            btn.BackgroundTransparency = 0.1
+            Settings.SelectedPlayer = player
+            infoLabel.Text = "✅ " .. player.Name
+            task.wait(1.5)
+            infoLabel.Text = "✅ Pronto"
+        end)
+    end
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        AddPlayerButton(player)
+    end
+    
+    Players.PlayerAdded:Connect(AddPlayerButton)
+    Players.PlayerRemoving:Connect(function(player)
+        if Settings.SelectedPlayer == player then
+            Settings.SelectedPlayer = nil
+        end
+    end)
+    
+    playerLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        playerScroll.CanvasSize = UDim2.new(0, 0, 0, playerLayout.AbsoluteContentSize.Y + 5)
+    end)
+end
+
+-- Button actions
+buttonsList.TP.MouseButton1Click:Connect(function()
+    if Settings.SelectedPlayer then
+        infoLabel.Text = TeleportToPlayer(Settings.SelectedPlayer)
+    else
+        infoLabel.Text = "❌ Selecione um jogador"
+    end
+    task.wait(1)
+    infoLabel.Text = "✅ Pronto"
+end)
+
+buttonsList.VISION.MouseButton1Click:Connect(function()
+    if Settings.SelectedPlayer then
+        infoLabel.Text = ViewPlayer(Settings.SelectedPlayer)
+    else
+        infoLabel.Text = "❌ Selecione um jogador"
+    end
+    task.wait(1.5)
+    infoLabel.Text = "✅ Pronto"
+end)
+
+buttonsList.PULL.MouseButton1Click:Connect(function()
+    if Settings.SelectedPlayer then
+        infoLabel.Text = PullPlayer(Settings.SelectedPlayer)
+    else
+        infoLabel.Text = "❌ Selecione um jogador"
+    end
+    task.wait(1.2)
+    infoLabel.Text = "✅ Pronto"
+end)
+
+buttonsList.NOCLIP.MouseButton1Click:Connect(ToggleNoclip)
+buttonsList.HITBOX.MouseButton1Click:Connect(ToggleHitbox)
+buttonsList.CLONE.MouseButton1Click:Connect(function()
+    if Settings.SelectedPlayer then
+        infoLabel.Text = CloneCharacter(Settings.SelectedPlayer)
+    else
+        infoLabel.Text = "❌ Selecione um jogador"
+    end
+    task.wait(1.5)
+    infoLabel.Text = "✅ Pronto"
+end)
+
+buttonsList.AURA.MouseButton1Click:Connect(ToggleAura)
+buttonsList.INVIS.MouseButton1Click:Connect(ToggleInvisibility)
+buttonsList.SUPERJUMP.MouseButton1Click:Connect(ToggleSuperJump)
+buttonsList.TELEK.MouseButton1Click:Connect(function()
+    TelekinesisMobile(Settings.SelectedPlayer)
+end)
+buttonsList.RESET.MouseButton1Click:Connect(function()
+    infoLabel.Text = ResetCharacter()
+    task.wait(1)
+    infoLabel.Text = "✅ Pronto"
+end)
+
+-- Minimize
+local miniFrame = nil
+minimizeBtn.MouseButton1Click:Connect(function()
+    mainFrame.Visible = false
+    
+    miniFrame = Instance.new("Frame")
+    miniFrame.Size = UDim2.new(0, 40, 0, 40)
+    miniFrame.Position = mainFrame.Position
+    miniFrame.BackgroundColor3 = DarkPurple
+    miniFrame.BackgroundTransparency = 0.3
+    miniFrame.Parent = screenGui
+    
+    local miniCorner = Instance.new("UICorner")
+    miniCorner.CornerRadius = UDim.new(1, 0)
+    miniCorner.Parent = miniFrame
+    
+    local miniLabel = Instance.new("TextLabel")
+    miniLabel.Size = UDim2.new(1, 0, 1, 0)
+    miniLabel.BackgroundTransparency = 1
+    miniLabel.Text = "⭐"
+    miniLabel.TextColor3 = LightPurple
+    miniLabel.TextSize = 20
+    miniLabel.Font = Enum.Font.GothamBold
+    miniLabel.Parent = miniFrame
+    
+    miniFrame.MouseButton1Click:Connect(function()
+        miniFrame:Destroy()
+        mainFrame.Visible = true
+    end)
+end)
+
+-- Atualiza auras quando novos jogadores entram
+Players.PlayerAdded:Connect(function(player)
+    if Settings.AuraEnabled and player ~= LocalPlayer then
+        task.wait(0.5)
+        ApplyAuraToPlayer(player)
+    end
+end)
+
+-- Inicializar
+UpdatePlayerList()
+infoLabel.Text = "✅ AGHATA HUB V5.4 - Selecione um jogador"
+print("🔮 Aghata Hub V5.4 Mobile carregado!")
